@@ -28,18 +28,12 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "2.1.1",
     "framer-motion": "11.15.0",
-<<<<<<< HEAD
     "raviger": "^4.2.1",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "react-router-dom": "^7.6.2",
-=======
     "lucide-react": "^0.517.0",
-    "react": "18.3.1",
-    "react-dom": "18.3.1",
-    "react-router-dom": "6.23.0",
     "tailwind-merge": "^3.3.1",
->>>>>>> 27fcb4573b13b5b98e1ce8af1d3d0bed1c3b4a3d
     "tailwind-variants": "0.3.0",
     "tailwindcss": "3.4.16",
     "tailwindcss-animate": "^1.0.7"
