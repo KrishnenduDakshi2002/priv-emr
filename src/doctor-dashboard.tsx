@@ -273,7 +273,7 @@ export default function DoctorDashboard() {
       </div>
 
       {/* Bottom Navigation */}
-      <DoctorDashboardNavigation currentPage="dashboard" /> 
+      {/* <DoctorDashboardNavigation currentPage="dashboard" />  */}
 
       {/* Mobile Safe Area */}
       <div className="h-16" />

@@ -254,7 +254,7 @@ export default function DoctorAccessRequests() {
         )}
       </div>
 
-      <DoctorDashboardNavigation currentPage="requests" />
+      {/* <DoctorDashboardNavigation currentPage="requests" /> */}
 
       {/* Mobile Safe Area */}
       <div className="h-4" />
