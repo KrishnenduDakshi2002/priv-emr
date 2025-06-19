@@ -1,10 +1,15 @@
-
 import { useState } from "react"
-import { ArrowLeft, Plus, Eye, Share2, X, Shield } from "lucide-react"
+import { ArrowLeft, Plus, Eye, Share2, X, Shield, CheckCircle, Download, Send, Mail, Clock, Copy, QrCode, Link } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import BellNotification from "./bell-notification-component"
 
 interface ZKProof {
@@ -17,6 +22,22 @@ interface ZKProof {
   status: "active" | "expired" | "revoked"
   shareCount: number
   proofType: "covid" | "vaccination" | "age" | "hospital" | "general"
+  claims: Array<{
+    statement: string
+    verified: boolean
+  }>
+  algorithm: string
+  proofSize: string
+  issuer: {
+    name: string
+    hospital: string
+    publicKey: string
+  }
+  technicalDetails: {
+    hash: string
+    signature: string
+    merkleRoot: string
+  }
 }
 
 export default function MyProofsScreen() {
@@ -31,6 +52,23 @@ export default function MyProofsScreen() {
       status: "active",
       shareCount: 3,
       proofType: "covid",
+      claims: [
+        { statement: "COVID-19 test result: Negative", verified: true },
+        { statement: "Test performed within last 72 hours", verified: true },
+        { statement: "PCR test method used", verified: true }
+      ],
+      algorithm: "ZK-SNARK",
+      proofSize: "24 KB",
+      issuer: {
+        name: "Dr. Priya Sharma",
+        hospital: "Max Healthcare",
+        publicKey: "0x1a2b3c4d5e6f7890abcdef..."
+      },
+      technicalDetails: {
+        hash: "0xabc123def456...",
+        signature: "0x789xyz012...",
+        merkleRoot: "0xdef456abc..."
+      }
     },
     {
       id: "2",
@@ -42,6 +80,23 @@ export default function MyProofsScreen() {
       status: "active",
       shareCount: 1,
       proofType: "vaccination",
+      claims: [
+        { statement: "Hepatitis-B vaccination completed", verified: true },
+        { statement: "Administered by licensed healthcare provider", verified: true },
+        { statement: "Full vaccination series completed", verified: true }
+      ],
+      algorithm: "ZK-STARK",
+      proofSize: "32 KB",
+      issuer: {
+        name: "Dr. Arvind Kumar",
+        hospital: "Apollo Hospital",
+        publicKey: "0x2b3c4d5e6f7890abcdef..."
+      },
+      technicalDetails: {
+        hash: "0xbcd234efg567...",
+        signature: "0x890abc123...",
+        merkleRoot: "0xefg567bcd..."
+      }
     },
     {
       id: "3",
@@ -53,6 +108,22 @@ export default function MyProofsScreen() {
       status: "active",
       shareCount: 2,
       proofType: "age",
+      claims: [
+        { statement: "Age greater than 18 years", verified: true },
+        { statement: "Identity verified by government document", verified: true }
+      ],
+      algorithm: "ZK-SNARK",
+      proofSize: "18 KB",
+      issuer: {
+        name: "Government Registry",
+        hospital: "Digital Identity Authority",
+        publicKey: "0x3c4d5e6f7890abcdef..."
+      },
+      technicalDetails: {
+        hash: "0xcde345fgh678...",
+        signature: "0x901bcd234...",
+        merkleRoot: "0xfgh678cde..."
+      }
     },
     {
       id: "4",
@@ -64,8 +135,41 @@ export default function MyProofsScreen() {
       status: "expired",
       shareCount: 0,
       proofType: "hospital",
+      claims: [
+        { statement: "Treatment received at registered hospital", verified: true },
+        { statement: "Discharge completed successfully", verified: true }
+      ],
+      algorithm: "ZK-SNARK",
+      proofSize: "26 KB",
+      issuer: {
+        name: "Dr. Rajesh Gupta",
+        hospital: "AIIMS Delhi",
+        publicKey: "0x4d5e6f7890abcdef..."
+      },
+      technicalDetails: {
+        hash: "0xdef456ghi789...",
+        signature: "0xa12cde345...",
+        merkleRoot: "0xghi789def..."
+      }
     },
   ])
+
+  // Modal states
+  const [viewModalOpen, setViewModalOpen] = useState(false)
+  const [shareModalOpen, setShareModalOpen] = useState(false)
+  const [selectedProof, setSelectedProof] = useState<ZKProof | null>(null)
+
+  // Share form state
+  const [shareForm, setShareForm] = useState({
+    recipientEmail: "",
+    accessExpiry: "",
+    purpose: "",
+    shareMethod: "email" as "email" | "link" | "qr"
+  })
+  const [shareErrors, setShareErrors] = useState<Record<string, string>>({})
+  const [isSharing, setIsSharing] = useState(false)
+  const [shareSuccess, setShareSuccess] = useState(false)
+  const [generatedLink, setGeneratedLink] = useState("")
 
   const getProofIcon = (type: string) => {
     switch (type) {
@@ -111,19 +215,86 @@ export default function MyProofsScreen() {
   }
 
   const handleViewProof = (proofId: string) => {
-    console.log("Viewing proof:", proofId)
+    const proof = proofs.find(p => p.id === proofId)
+    if (proof) {
+      setSelectedProof(proof)
+      setViewModalOpen(true)
+    }
   }
 
   const handleShareProof = (proofId: string) => {
-    console.log("Sharing proof:", proofId)
+    const proof = proofs.find(p => p.id === proofId)
+    if (proof) {
+      setSelectedProof(proof)
+      setShareModalOpen(true)
+    }
   }
 
   const handleRevokeProof = (proofId: string) => {
     console.log("Revoking proof:", proofId)
+    // Implementation for revoking proof
   }
 
   const handleGenerateProof = () => {
     console.log("Navigate to generate proof flow")
+  }
+
+  // Share form validation
+  const validateShareForm = () => {
+    const newErrors: Record<string, string> = {}
+
+    if (shareForm.shareMethod === "email") {
+      if (!shareForm.recipientEmail || !/\S+@\S+\.\S+/.test(shareForm.recipientEmail)) {
+        newErrors.recipientEmail = "Please enter a valid email address"
+      }
+    }
+
+    if (!shareForm.accessExpiry) {
+      newErrors.accessExpiry = "Please select access duration"
+    }
+
+    setShareErrors(newErrors)
+    return Object.keys(newErrors).length === 0
+  }
+
+  // Handle share submission
+  const handleShareSubmit = async () => {
+    if (!validateShareForm()) return
+
+    setIsSharing(true)
+
+    // Simulate API call
+    await new Promise(resolve => setTimeout(resolve, 2000))
+
+    // Generate shareable link
+    const link = `https://privemr.app/verify/${selectedProof?.id}?token=${Math.random().toString(36).substring(7)}`
+    setGeneratedLink(link)
+
+    setIsSharing(false)
+    setShareSuccess(true)
+
+    // Reset form after 3 seconds
+    setTimeout(() => {
+      setShareSuccess(false)
+      setShareModalOpen(false)
+      setShareForm({
+        recipientEmail: "",
+        accessExpiry: "",
+        purpose: "",
+        shareMethod: "email"
+      })
+      setGeneratedLink("")
+    }, 3000)
+  }
+
+  // Copy link to clipboard
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      // You could add a toast notification here
+    } catch (err) {
+      console.error('Failed to copy: ', err)
+    }
   }
 
   const activeProofs = proofs.filter((proof) => proof.status === "active")
@@ -316,6 +487,375 @@ export default function MyProofsScreen() {
           </div>
         )}
       </div>
+
+      {/* View Proof Modal */}
+      <Dialog open={viewModalOpen} onOpenChange={setViewModalOpen}>
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+          <DialogHeader className="flex-shrink-0">
+            <DialogTitle className="flex items-center gap-2">
+              <Shield className="h-5 w-5 text-purple-600" />
+              {selectedProof?.title}
+            </DialogTitle>
+          </DialogHeader>
+
+                     {selectedProof && (
+             <div className="space-y-4 overflow-y-auto flex-1 pr-2 pb-2">
+              {/* Proof Status */}
+              <Alert className="border-green-200 bg-green-50">
+                <CheckCircle className="h-4 w-4 text-green-600" />
+                <AlertDescription className="text-green-800 text-sm font-medium">
+                  ✅ Proof Successfully Verified
+                </AlertDescription>
+              </Alert>
+
+              {/* Proof Details */}
+              <Card className="border-0 shadow-sm">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-lg">Proof Information</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="bg-gray-50 p-3 rounded-lg space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-500">Algorithm:</span>
+                      <span className="text-gray-900 font-mono">{selectedProof.algorithm}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-500">Proof Size:</span>
+                      <span className="text-gray-900">{selectedProof.proofSize}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-500">Created:</span>
+                      <span className="text-gray-900">{new Date(selectedProof.createdDate).toLocaleDateString("en-IN")}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-500">Expires:</span>
+                      <span className="text-gray-900">
+                        {selectedProof.expiryDate ? new Date(selectedProof.expiryDate).toLocaleDateString("en-IN") : "Never"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-500">Share Count:</span>
+                      <span className="text-gray-900">{selectedProof.shareCount} times</span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Verified Claims */}
+              <Card className="border-0 shadow-sm">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    ✅ Verified Claims
+                  </CardTitle>
+                  <p className="text-sm text-gray-600">The following statements have been cryptographically proven:</p>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {selectedProof.claims.map((claim, index) => (
+                    <div key={index} className="flex items-start gap-3 p-3 bg-green-50 rounded-lg border border-green-200">
+                      <div className="w-6 h-6 bg-green-100 rounded-full flex items-center justify-center mt-0.5">
+                        <CheckCircle className="h-4 w-4 text-green-600" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-gray-900">{claim.statement}</p>
+                        <p className="text-xs text-green-700 mt-1">Cryptographically verified</p>
+                      </div>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+
+              {/* Issuer Information */}
+              <Card className="border-0 shadow-sm">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    🏥 Issuer Information
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="bg-gray-50 p-3 rounded-lg space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-500">Provider:</span>
+                      <span className="text-gray-900 font-medium">{selectedProof.issuer.name}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-500">Institution:</span>
+                      <span className="text-gray-900">{selectedProof.issuer.hospital}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-500">Public Key:</span>
+                      <span className="text-gray-900 font-mono text-xs">{selectedProof.issuer.publicKey}</span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Technical Details */}
+              <Card className="border-0 shadow-sm">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    🔧 Technical Details
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="bg-gray-50 p-3 rounded-lg space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-500">Hash:</span>
+                      <span className="text-gray-900 font-mono text-xs">{selectedProof.technicalDetails.hash}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-500">Signature:</span>
+                      <span className="text-gray-900 font-mono text-xs">{selectedProof.technicalDetails.signature}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-500">Merkle Root:</span>
+                      <span className="text-gray-900 font-mono text-xs">{selectedProof.technicalDetails.merkleRoot}</span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+                           </div>
+           )}
+           
+           {/* Fixed Action Buttons */}
+           {selectedProof && (
+             <div className="flex gap-3 pt-4 border-t border-gray-200 flex-shrink-0 mt-4">
+               <Button variant="outline" className="flex-1">
+                 <Download className="mr-2 h-4 w-4" />
+                 Export Proof
+               </Button>
+               <Button 
+                 onClick={() => {
+                   setViewModalOpen(false)
+                   handleShareProof(selectedProof.id)
+                 }}
+                 className="flex-1 bg-blue-500 hover:bg-blue-600 text-white"
+               >
+                 <Share2 className="mr-2 h-4 w-4" />
+                 Share Proof
+               </Button>
+             </div>
+           )}
+         </DialogContent>
+       </Dialog>
+
+             {/* Share Proof Modal */}
+       <Dialog open={shareModalOpen} onOpenChange={setShareModalOpen}>
+         <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+           <DialogHeader className="flex-shrink-0">
+             <DialogTitle className="flex items-center gap-2">
+               <Share2 className="h-5 w-5 text-blue-600" />
+               Share ZK Proof
+             </DialogTitle>
+           </DialogHeader>
+
+           {selectedProof && (
+             <div className="space-y-4 overflow-y-auto flex-1 pr-2 pb-2">
+              {shareSuccess ? (
+                // Success State
+                <div className="text-center py-8">
+                  <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <CheckCircle className="h-8 w-8 text-green-600" />
+                  </div>
+                  <h3 className="text-xl font-semibold text-gray-900 mb-2">Proof Shared Successfully!</h3>
+                  <p className="text-gray-600 mb-4">
+                    Your zero-knowledge proof has been securely shared
+                  </p>
+                  
+                  {generatedLink && (
+                    <div className="bg-gray-50 p-3 rounded-lg mb-4">
+                      <p className="text-sm text-gray-700 mb-2">Shareable Link:</p>
+                      <div className="flex items-center gap-2">
+                        <Input value={generatedLink} readOnly className="text-xs" />
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={() => copyToClipboard(generatedLink)}
+                        >
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  <Alert className="border-blue-200 bg-blue-50">
+                    <Shield className="h-4 w-4 text-blue-600" />
+                    <AlertDescription className="text-blue-800 text-sm">
+                      🔒 Recipients can verify your claims without accessing your medical records
+                    </AlertDescription>
+                  </Alert>
+                </div>
+              ) : (
+                // Share Form
+                <>
+                  {/* Proof Summary */}
+                  <Card className="border-0 shadow-sm border-l-4 border-l-purple-500">
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-3 mb-3">
+                        <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
+                          <Shield className="h-5 w-5 text-purple-600" />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-gray-900">{selectedProof.title}</h3>
+                          <p className="text-sm text-gray-600">Zero-Knowledge Proof</p>
+                        </div>
+                      </div>
+
+                      <div className="bg-gray-50 p-3 rounded-lg space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-500">Claims:</span>
+                          <span className="text-gray-900 font-medium">{selectedProof.claims.length}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-500">Source:</span>
+                          <span className="text-gray-900">{selectedProof.sourceEMR}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-500">Size:</span>
+                          <span className="text-gray-900">{selectedProof.proofSize}</span>
+                        </div>
+                      </div>
+
+                      <div className="mt-3 space-y-1">
+                        <p className="text-xs font-medium text-gray-700">What will be shared:</p>
+                        {selectedProof.claims.map((claim, index) => (
+                          <div key={index} className="flex items-center gap-2 text-xs text-gray-600">
+                            <div className="w-1 h-1 bg-green-500 rounded-full" />
+                            <span>{claim.statement}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Share Method Tabs */}
+                  <Tabs value={shareForm.shareMethod} onValueChange={(value) => setShareForm({...shareForm, shareMethod: value as "email" | "link" | "qr"})}>
+                    <TabsList className="grid w-full grid-cols-3">
+                      <TabsTrigger value="email" className="flex items-center gap-2">
+                        <Mail className="h-4 w-4" />
+                        Email
+                      </TabsTrigger>
+                      <TabsTrigger value="link" className="flex items-center gap-2">
+                        <Link className="h-4 w-4" />
+                        Link
+                      </TabsTrigger>
+                      <TabsTrigger value="qr" className="flex items-center gap-2">
+                        <QrCode className="h-4 w-4" />
+                        QR Code
+                      </TabsTrigger>
+                    </TabsList>
+
+                    <TabsContent value="email" className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="email">Recipient Email</Label>
+                        <Input
+                          id="email"
+                          type="email"
+                          placeholder="Enter recipient's email address"
+                          value={shareForm.recipientEmail}
+                          onChange={(e) => setShareForm({...shareForm, recipientEmail: e.target.value})}
+                          className={shareErrors.recipientEmail ? "border-red-300" : ""}
+                        />
+                        {shareErrors.recipientEmail && (
+                          <p className="text-xs text-red-600">{shareErrors.recipientEmail}</p>
+                        )}
+                      </div>
+                    </TabsContent>
+
+                    <TabsContent value="link" className="space-y-4">
+                      <Alert className="border-blue-200 bg-blue-50">
+                        <Link className="h-4 w-4 text-blue-600" />
+                        <AlertDescription className="text-blue-800 text-sm">
+                          Generate a secure link that can be shared via any communication method
+                        </AlertDescription>
+                      </Alert>
+                    </TabsContent>
+
+                    <TabsContent value="qr" className="space-y-4">
+                      <Alert className="border-purple-200 bg-purple-50">
+                        <QrCode className="h-4 w-4 text-purple-600" />
+                        <AlertDescription className="text-purple-800 text-sm">
+                          Generate a QR code for easy scanning and verification
+                        </AlertDescription>
+                      </Alert>
+                    </TabsContent>
+                  </Tabs>
+
+                  {/* Access Duration */}
+                  <div className="space-y-2">
+                    <Label htmlFor="access-expiry">Access Duration</Label>
+                    <Select value={shareForm.accessExpiry} onValueChange={(value) => setShareForm({...shareForm, accessExpiry: value})}>
+                      <SelectTrigger className={shareErrors.accessExpiry ? "border-red-300" : ""}>
+                        <SelectValue placeholder="Select access duration" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="1-time">One-time verification</SelectItem>
+                        <SelectItem value="24-hours">24 hours</SelectItem>
+                        <SelectItem value="7-days">7 days</SelectItem>
+                        <SelectItem value="30-days">30 days</SelectItem>
+                        <SelectItem value="permanent">Permanent access</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {shareErrors.accessExpiry && (
+                      <p className="text-xs text-red-600">{shareErrors.accessExpiry}</p>
+                    )}
+                  </div>
+
+                  {/* Purpose (Optional) */}
+                  <div className="space-y-2">
+                    <Label htmlFor="purpose">Purpose (Optional)</Label>
+                    <Textarea
+                      id="purpose"
+                      placeholder="Why are you sharing this proof? (e.g., job application, travel requirement)"
+                      value={shareForm.purpose}
+                      onChange={(e) => setShareForm({...shareForm, purpose: e.target.value})}
+                      rows={3}
+                    />
+                  </div>
+
+                  {/* Privacy Notice */}
+                  <Alert className="border-green-200 bg-green-50">
+                    <Shield className="h-4 w-4 text-green-600" />
+                    <AlertDescription className="text-green-800 text-sm">
+                      <div className="space-y-1">
+                        <p className="font-medium">🔒 Privacy Protected:</p>
+                        <p>• Only your selected claims will be verifiable</p>
+                        <p>• Your full medical records remain private</p>
+                        <p>• Recipients cannot access original documents</p>
+                        <p>• You can revoke access anytime</p>
+                      </div>
+                    </AlertDescription>
+                  </Alert>
+
+                                   </>
+               )}
+             </div>
+           )}
+           
+           {/* Fixed Submit Button */}
+           {selectedProof && !shareSuccess && (
+             <div className="pt-4 border-t border-gray-200 flex-shrink-0">
+               <Button
+                 onClick={handleShareSubmit}
+                 disabled={isSharing}
+                 className="w-full h-12 bg-green-500 hover:bg-green-600 text-white font-medium"
+               >
+                 {isSharing ? (
+                   <>
+                     <Clock className="mr-2 h-4 w-4 animate-spin" />
+                     Sharing Proof...
+                   </>
+                 ) : (
+                   <>
+                     <Send className="mr-2 h-4 w-4" />
+                     Share ZK Proof
+                   </>
+                 )}
+               </Button>
+             </div>
+           )}
+         </DialogContent>
+       </Dialog>
 
       {/* Mobile Safe Area */}
       <div className="h-4" />
