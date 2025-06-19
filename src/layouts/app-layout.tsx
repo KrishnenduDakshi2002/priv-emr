@@ -18,7 +18,7 @@ const routeBreadcrumbs: Record<string, { label: string; href?: string }[]> = {
   "/admin": [{ label: "Admin Panel" }],
   "/doctor": [{ label: "Doctor Portal" }],
   "/lab": [{ label: "Lab Portal" }],
-  "/create-emr": [{ label: "Create EMR" }],
+  "/create-emr": [{ label: "Lab Portal", href: "/lab" }, { label: "Create EMR" }],
   "/my-emr": [{ label: "My EMRs" }],
   "/my-emrs": [{ label: "My EMRs" }],
   "/my-emrs-main": [{ label: "My EMRs", href: "/my-emrs" }, { label: "Main" }],

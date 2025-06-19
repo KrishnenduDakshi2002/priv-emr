@@ -66,20 +66,15 @@ const navigationData = {
           url: "/user",
           icon: Home,
         },
-        {
-          title: "My EMRs",
-          url: "/my-emrs",
-          icon: FileText,
-        },
+        // {
+        //   title: "My EMRs",
+        //   url: "/my-emrs",
+        //   icon: FileText,
+        // },
         {
           title: "My EMRs Main",
           url: "/my-emrs-main",
           icon: FolderOpen,
-        },
-        {
-          title: "Create EMR",
-          url: "/create-emr",
-          icon: FileText,
         },
         {
           title: "Share EMR",
@@ -146,15 +141,20 @@ const navigationData = {
           url: "/admin",
           icon: UserCog,
         },
+        // {
+        //   title: "Doctor Portal",
+        //   url: "/doctor",
+        //   icon: Stethoscope,
+        // },
+        // {
+        //   title: "Lab Portal",
+        //   url: "/lab",
+        //   icon: TestTube,
+        // },
         {
-          title: "Doctor Portal",
-          url: "/doctor",
-          icon: Stethoscope,
-        },
-        {
-          title: "Lab Portal",
-          url: "/lab",
-          icon: TestTube,
+          title: "Create EMR",
+          url: "/create-emr",
+          icon: FileText,
         },
       ],
     },
