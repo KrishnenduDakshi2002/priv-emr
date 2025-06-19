@@ -1,15 +1,22 @@
 
 import { useState, useEffect } from "react"
-import { Search, Plus, Eye, Share2, MoreVertical, Calendar, User, CheckCircle, XCircle, FileText } from "lucide-react"
+import { Search, Plus, Eye, Share2, MoreVertical, Calendar, User, CheckCircle, XCircle, FileText, Download, Copy, Mail, Clock, Shield, Hash, Key, Lock, Users, Send } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Card, CardContent } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { toast } from "@/hooks/use-toast"
 import { useNavigate } from "raviger"
-import { EMRSummary } from "@/types/emr"
-import { EMRStorage } from "@/lib/emr-utils"
+import { EMRSummary, EMRRecord } from "@/types/emr"
+import { EMRStorage, EMRCrypto } from "@/lib/emr-utils"
 import BottomNavigation from "./bottom-navigation"
 import BellNotification from "./bell-notification-component"
 
@@ -20,6 +27,17 @@ export default function MyEMRsMainScreen() {
   const [isLoading, setIsLoading] = useState(false)
   const [emrs, setEmrs] = useState<EMRSummary[]>([])
   const [showDummyData, setShowDummyData] = useState(true)
+  const [selectedEMR, setSelectedEMR] = useState<EMRSummary | null>(null)
+  const [viewDialogOpen, setViewDialogOpen] = useState(false)
+  const [shareDialogOpen, setShareDialogOpen] = useState(false)
+  const [shareFormData, setShareFormData] = useState({
+    doctorEmail: "",
+    accessDuration: "7-days",
+    purpose: "",
+    allowDownload: false,
+    allowPrint: false,
+    notifyPatient: true
+  })
 
   // Dummy EMR data for demonstration
   const dummyEMRs: EMRSummary[] = [
@@ -198,6 +216,95 @@ export default function MyEMRsMainScreen() {
     })
   }
 
+  const formatDateTime = (dateString: string) => {
+    const date = new Date(dateString)
+    return date.toLocaleString("en-IN", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    })
+  }
+
+  const getFullEMRData = (emrId: string): EMRRecord | null => {
+    // For dummy data, create a mock full EMR record
+    const emr = emrs.find(e => e.id === emrId)
+    if (!emr) return null
+
+    if (emrId.startsWith('EMR-DEMO')) {
+      // Mock full EMR data for demo records
+      return {
+        id: emr.id,
+        version: '1.0',
+        patient: {
+          email: 'patient@example.com',
+          aadhaarNumber: '1234-5678-9012',
+          abhaId: '12-3456-7890-1234',
+          name: 'John Doe'
+        },
+        provider: {
+          name: emr.provider,
+          hospitalName: emr.hospital,
+          specialization: 'General Medicine'
+        },
+        metadata: {
+          id: emr.id,
+          title: emr.title,
+          description: emr.description,
+          type: emr.type,
+          subType: emr.subType,
+          priority: emr.priority,
+          status: 'active',
+          tags: emr.tags
+        },
+        content: {
+          textData: `Encrypted medical data for ${emr.title}. This is a demo record showing how the EMR content would be displayed.`,
+          structuredData: emr.type === 'lab' ? {
+            labResults: [
+              { testName: 'Hemoglobin', value: 14.2, unit: 'g/dL', referenceRange: '12-16', status: 'normal' },
+              { testName: 'WBC Count', value: 7500, unit: '/μL', referenceRange: '4000-11000', status: 'normal' }
+            ]
+          } : undefined
+        },
+        security: {
+          hash: '0xa1b2c3d4e5f6...789abc',
+          signature: '0x9876543210ab...cdef12',
+          encryptionMethod: 'AES-256-GCM',
+          keyId: `key-${emr.id}`,
+          isEncrypted: true,
+          isSigned: true,
+          verificationStatus: emr.verified ? 'verified' : 'pending'
+        },
+        timestamps: {
+          createdAt: emr.dateCreated,
+          updatedAt: emr.dateCreated,
+          lastAccessedAt: emr.lastAccessed
+        },
+        access: {
+          createdBy: {
+            name: emr.provider,
+            hospitalName: emr.hospital
+          },
+          accessLog: [],
+          sharedWith: []
+        },
+        compliance: {
+          hipaaCompliant: true,
+          gdprCompliant: true,
+          localRegulationsCompliant: true,
+          retentionPeriod: 7,
+          consentGiven: true,
+          consentDate: emr.dateCreated,
+          auditTrail: []
+        }
+      } as EMRRecord
+    }
+
+    // For real EMRs, get from localStorage
+    return EMRStorage.getEMRById(emrId)
+  }
+
   const getTypeIcon = (type: string) => {
     switch (type) {
       case "lab":
@@ -233,13 +340,146 @@ export default function MyEMRsMainScreen() {
   }
 
   const handleViewEMR = (emrId: string) => {
-    console.log("Viewing EMR:", emrId)
-    // Navigate to EMR detail view
+    const emr = emrs.find(e => e.id === emrId)
+    if (emr) {
+      setSelectedEMR(emr)
+      setViewDialogOpen(true)
+    }
   }
 
   const handleShareEMR = (emrId: string) => {
-    console.log("Sharing EMR:", emrId)
-    // Navigate to share EMR screen
+    const emr = emrs.find(e => e.id === emrId)
+    if (emr) {
+      setSelectedEMR(emr)
+      setShareDialogOpen(true)
+    }
+  }
+
+  const handleDownloadEMR = async (emrId: string) => {
+    try {
+      const fullEMR = EMRStorage.getEMRById(emrId)
+      if (fullEMR) {
+        const exportData = {
+          id: fullEMR.id,
+          title: fullEMR.metadata.title,
+          patient: fullEMR.patient,
+          provider: fullEMR.provider,
+          content: fullEMR.content,
+          timestamps: fullEMR.timestamps,
+          security: fullEMR.security
+        }
+        
+        const dataStr = JSON.stringify(exportData, null, 2)
+        const dataBlob = new Blob([dataStr], { type: 'application/json' })
+        const url = URL.createObjectURL(dataBlob)
+        const link = document.createElement('a')
+        link.href = url
+        link.download = `EMR-${fullEMR.id}-${fullEMR.metadata.title.replace(/[^a-zA-Z0-9]/g, '_')}.json`
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        URL.revokeObjectURL(url)
+        
+        toast({
+          title: "EMR Downloaded",
+          description: "EMR has been downloaded successfully.",
+        })
+      }
+    } catch (error) {
+      toast({
+        title: "Download Failed",
+        description: "Failed to download EMR. Please try again.",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const copyToClipboard = async (text: string, fieldName: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      toast({
+        title: "Copied to clipboard",
+        description: `${fieldName} has been copied to your clipboard.`,
+      })
+    } catch (error) {
+      toast({
+        title: "Copy failed",
+        description: "Unable to copy to clipboard.",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleShareSubmit = async () => {
+    if (!selectedEMR || !shareFormData.doctorEmail || !shareFormData.purpose) {
+      toast({
+        title: "Missing Information",
+        description: "Please fill in all required fields.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    try {
+      // Simulate sharing process
+      const shareId = `SHARE-${Date.now().toString(36).toUpperCase()}`
+      const expiresAt = new Date()
+      
+      switch (shareFormData.accessDuration) {
+        case "1-hour":
+          expiresAt.setHours(expiresAt.getHours() + 1)
+          break
+        case "24-hours":
+          expiresAt.setHours(expiresAt.getHours() + 24)
+          break
+        case "7-days":
+          expiresAt.setDate(expiresAt.getDate() + 7)
+          break
+        case "30-days":
+          expiresAt.setDate(expiresAt.getDate() + 30)
+          break
+        case "permanent":
+          expiresAt.setFullYear(expiresAt.getFullYear() + 10)
+          break
+      }
+
+      // In a real app, this would make an API call
+      console.log("Sharing EMR:", {
+        emrId: selectedEMR.id,
+        shareId,
+        doctorEmail: shareFormData.doctorEmail,
+        purpose: shareFormData.purpose,
+        permissions: {
+          download: shareFormData.allowDownload,
+          print: shareFormData.allowPrint
+        },
+        expiresAt: expiresAt.toISOString()
+      })
+
+      toast({
+        title: "EMR Shared Successfully",
+        description: `EMR has been shared with ${shareFormData.doctorEmail}. Share ID: ${shareId}`,
+      })
+
+      // Reset form and close dialog
+      setShareFormData({
+        doctorEmail: "",
+        accessDuration: "7-days",
+        purpose: "",
+        allowDownload: false,
+        allowPrint: false,
+        notifyPatient: true
+      })
+      setShareDialogOpen(false)
+      setSelectedEMR(null)
+
+    } catch (error) {
+      toast({
+        title: "Sharing Failed",
+        description: "Failed to share EMR. Please try again.",
+        variant: "destructive",
+      })
+    }
   }
 
   const handleUploadEMR = () => {
@@ -443,6 +683,10 @@ export default function MyEMRsMainScreen() {
                           <Share2 className="mr-2 h-4 w-4" />
                           Share Access
                         </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleDownloadEMR(emr.id)}>
+                          <Download className="mr-2 h-4 w-4" />
+                          Download EMR
+                        </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>
@@ -520,6 +764,449 @@ export default function MyEMRsMainScreen() {
 
       {/* Bottom Navigation */}
       <BottomNavigation currentPage="my-emrs" />
+
+      {/* View EMR Dialog */}
+      <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              {selectedEMR?.title}
+            </DialogTitle>
+            <DialogDescription>
+              Detailed view of medical record - {selectedEMR?.id}
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedEMR && (
+            <Tabs defaultValue="overview" className="w-full">
+              <TabsList className="grid w-full grid-cols-4">
+                <TabsTrigger value="overview">Overview</TabsTrigger>
+                <TabsTrigger value="content">Content</TabsTrigger>
+                <TabsTrigger value="security">Security</TabsTrigger>
+                <TabsTrigger value="sharing">Sharing</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="overview" className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-sm">EMR Information</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div className="flex justify-between">
+                        <span className="text-sm text-gray-600">ID:</span>
+                        <div className="flex items-center gap-2">
+                          <code className="text-xs bg-gray-100 px-2 py-1 rounded">{selectedEMR.id}</code>
+                          <Button size="sm" variant="ghost" onClick={() => copyToClipboard(selectedEMR.id, "EMR ID")} className="h-6 w-6 p-0">
+                            <Copy className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm text-gray-600">Type:</span>
+                        <Badge variant="outline" className={getTypeColor(selectedEMR.type)}>
+                          {selectedEMR.type.charAt(0).toUpperCase() + selectedEMR.type.slice(1)}
+                        </Badge>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm text-gray-600">Priority:</span>
+                        <Badge variant={selectedEMR.priority === 'critical' ? 'destructive' : selectedEMR.priority === 'high' ? 'default' : 'secondary'}>
+                          {selectedEMR.priority.charAt(0).toUpperCase() + selectedEMR.priority.slice(1)}
+                        </Badge>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm text-gray-600">Status:</span>
+                        <Badge variant={selectedEMR.verified ? "default" : "destructive"}>
+                          {selectedEMR.verified ? "Verified" : "Pending"}
+                        </Badge>
+                      </div>
+                      {selectedEMR.fileSize && (
+                        <div className="flex justify-between">
+                          <span className="text-sm text-gray-600">File Size:</span>
+                          <span className="text-sm">{selectedEMR.fileSize}</span>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-sm">Provider Information</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div className="flex justify-between">
+                        <span className="text-sm text-gray-600">Doctor:</span>
+                        <span className="text-sm font-medium">{selectedEMR.provider}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm text-gray-600">Hospital:</span>
+                        <span className="text-sm">{selectedEMR.hospital}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm text-gray-600">Created:</span>
+                        <span className="text-sm">{formatDateTime(selectedEMR.dateCreated)}</span>
+                      </div>
+                      {selectedEMR.lastAccessed && (
+                        <div className="flex justify-between">
+                          <span className="text-sm text-gray-600">Last Accessed:</span>
+                          <span className="text-sm">{formatDateTime(selectedEMR.lastAccessed)}</span>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-sm">Description</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-gray-700">{selectedEMR.description}</p>
+                  </CardContent>
+                </Card>
+
+                {selectedEMR.tags.length > 0 && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-sm">Tags</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex flex-wrap gap-2">
+                        {selectedEMR.tags.map(tag => (
+                          <Badge key={tag} variant="outline" className="text-xs">
+                            {tag}
+                          </Badge>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </TabsContent>
+
+              <TabsContent value="content" className="space-y-4">
+                {(() => {
+                  const fullEMR = getFullEMRData(selectedEMR.id)
+                  return fullEMR ? (
+                    <div className="space-y-4">
+                      {fullEMR.content.textData && (
+                        <Card>
+                          <CardHeader>
+                            <CardTitle className="text-sm flex items-center gap-2">
+                              <FileText className="h-4 w-4" />
+                              Medical Content
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="bg-gray-50 p-4 rounded-lg">
+                              <p className="text-sm whitespace-pre-wrap">{fullEMR.content.textData}</p>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      )}
+
+                      {fullEMR.content.structuredData?.labResults && (
+                        <Card>
+                          <CardHeader>
+                            <CardTitle className="text-sm">Lab Results</CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="space-y-2">
+                              {fullEMR.content.structuredData.labResults.map((result, index) => (
+                                <div key={index} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                                  <div>
+                                    <span className="font-medium text-sm">{result.testName}</span>
+                                    <span className="text-xs text-gray-500 ml-2">({result.referenceRange})</span>
+                                  </div>
+                                  <div className="text-right">
+                                    <span className="font-medium">{result.value} {result.unit}</span>
+                                    <Badge 
+                                      variant={result.status === 'normal' ? 'default' : result.status === 'critical' ? 'destructive' : 'secondary'}
+                                      className="ml-2 text-xs"
+                                    >
+                                      {result.status}
+                                    </Badge>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      )}
+
+                      {fullEMR.content.fileData && (
+                        <Card>
+                          <CardHeader>
+                            <CardTitle className="text-sm">Attached File</CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                              <div className="flex items-center gap-3">
+                                <FileText className="h-8 w-8 text-blue-600" />
+                                <div>
+                                  <p className="font-medium text-sm">{fullEMR.content.fileData.originalName}</p>
+                                  <p className="text-xs text-gray-500">{fullEMR.content.fileData.mimeType}</p>
+                                </div>
+                              </div>
+                              <Button size="sm" variant="outline">
+                                <Download className="h-4 w-4 mr-2" />
+                                Download
+                              </Button>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8">
+                      <p className="text-gray-500">Unable to load EMR content</p>
+                    </div>
+                  )
+                })()}
+              </TabsContent>
+
+              <TabsContent value="security" className="space-y-4">
+                {(() => {
+                  const fullEMR = getFullEMRData(selectedEMR.id)
+                  return fullEMR ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-sm flex items-center gap-2">
+                            <Shield className="h-4 w-4" />
+                            Encryption & Signing
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-gray-600">Encrypted:</span>
+                            <Badge variant={fullEMR.security.isEncrypted ? "default" : "destructive"}>
+                              {fullEMR.security.isEncrypted ? "Yes" : "No"}
+                            </Badge>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-gray-600">Signed:</span>
+                            <Badge variant={fullEMR.security.isSigned ? "default" : "destructive"}>
+                              {fullEMR.security.isSigned ? "Yes" : "No"}
+                            </Badge>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-gray-600">Verification:</span>
+                            <Badge variant={fullEMR.security.verificationStatus === 'verified' ? "default" : "secondary"}>
+                              {fullEMR.security.verificationStatus}
+                            </Badge>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-gray-600">Method:</span>
+                            <span className="text-sm font-mono">{fullEMR.security.encryptionMethod}</span>
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-sm flex items-center gap-2">
+                            <Hash className="h-4 w-4" />
+                            Cryptographic Hashes
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          <div>
+                            <div className="flex justify-between items-center mb-1">
+                              <span className="text-sm text-gray-600">Hash:</span>
+                              <Button size="sm" variant="ghost" onClick={() => copyToClipboard(fullEMR.security.hash, "Hash")} className="h-6 w-6 p-0">
+                                <Copy className="h-3 w-3" />
+                              </Button>
+                            </div>
+                            <code className="text-xs bg-gray-100 p-2 rounded block break-all">{fullEMR.security.hash}</code>
+                          </div>
+                          <div>
+                            <div className="flex justify-between items-center mb-1">
+                              <span className="text-sm text-gray-600">Signature:</span>
+                              <Button size="sm" variant="ghost" onClick={() => copyToClipboard(fullEMR.security.signature, "Signature")} className="h-6 w-6 p-0">
+                                <Copy className="h-3 w-3" />
+                              </Button>
+                            </div>
+                            <code className="text-xs bg-gray-100 p-2 rounded block break-all">{fullEMR.security.signature}</code>
+                          </div>
+                          <div>
+                            <span className="text-sm text-gray-600">Key ID:</span>
+                            <code className="text-xs bg-gray-100 p-2 rounded block mt-1">{fullEMR.security.keyId}</code>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
+                  ) : (
+                    <div className="text-center py-8">
+                      <p className="text-gray-500">Unable to load security information</p>
+                    </div>
+                  )
+                })()}
+              </TabsContent>
+
+              <TabsContent value="sharing" className="space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <Users className="h-4 w-4" />
+                      Quick Share
+                    </CardTitle>
+                    <CardDescription>
+                      Share this EMR with a healthcare provider
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <Button 
+                      onClick={() => handleShareEMR(selectedEMR.id)} 
+                      className="w-full"
+                    >
+                      <Share2 className="h-4 w-4 mr-2" />
+                      Share EMR Access
+                    </Button>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-sm">Access History</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                        <div className="flex items-center gap-3">
+                          <User className="h-4 w-4 text-gray-600" />
+                          <div>
+                            <p className="text-sm font-medium">{selectedEMR.provider}</p>
+                            <p className="text-xs text-gray-500">Created EMR</p>
+                          </div>
+                        </div>
+                        <span className="text-xs text-gray-500">{formatDateTime(selectedEMR.dateCreated)}</span>
+                      </div>
+                      {selectedEMR.lastAccessed && (
+                        <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                          <div className="flex items-center gap-3">
+                            <Eye className="h-4 w-4 text-gray-600" />
+                            <div>
+                              <p className="text-sm font-medium">You</p>
+                              <p className="text-xs text-gray-500">Last viewed</p>
+                            </div>
+                          </div>
+                          <span className="text-xs text-gray-500">{formatDateTime(selectedEMR.lastAccessed)}</span>
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            </Tabs>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Share EMR Dialog */}
+      <Dialog open={shareDialogOpen} onOpenChange={setShareDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Share2 className="h-5 w-5" />
+              Share EMR Access
+            </DialogTitle>
+            <DialogDescription>
+              Grant secure access to {selectedEMR?.title}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="doctorEmail">Healthcare Provider Email *</Label>
+              <Input
+                id="doctorEmail"
+                type="email"
+                placeholder="doctor@hospital.com"
+                value={shareFormData.doctorEmail}
+                onChange={(e) => setShareFormData(prev => ({ ...prev, doctorEmail: e.target.value }))}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="accessDuration">Access Duration *</Label>
+              <Select 
+                value={shareFormData.accessDuration} 
+                onValueChange={(value) => setShareFormData(prev => ({ ...prev, accessDuration: value }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select duration" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1-hour">1 Hour</SelectItem>
+                  <SelectItem value="24-hours">24 Hours</SelectItem>
+                  <SelectItem value="7-days">7 Days</SelectItem>
+                  <SelectItem value="30-days">30 Days</SelectItem>
+                  <SelectItem value="permanent">Permanent</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="purpose">Purpose of Access *</Label>
+              <Textarea
+                id="purpose"
+                placeholder="e.g., Consultation, Second opinion, Treatment planning..."
+                value={shareFormData.purpose}
+                onChange={(e) => setShareFormData(prev => ({ ...prev, purpose: e.target.value }))}
+                rows={3}
+              />
+            </div>
+
+            <div className="space-y-3">
+              <Label>Permissions</Label>
+              <div className="space-y-2">
+                <div className="flex items-center space-x-2">
+                  <Checkbox 
+                    id="allowDownload"
+                    checked={shareFormData.allowDownload}
+                    onCheckedChange={(checked) => setShareFormData(prev => ({ ...prev, allowDownload: checked as boolean }))}
+                  />
+                  <Label htmlFor="allowDownload" className="text-sm">Allow download</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Checkbox 
+                    id="allowPrint"
+                    checked={shareFormData.allowPrint}
+                    onCheckedChange={(checked) => setShareFormData(prev => ({ ...prev, allowPrint: checked as boolean }))}
+                  />
+                  <Label htmlFor="allowPrint" className="text-sm">Allow printing</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Checkbox 
+                    id="notifyPatient"
+                    checked={shareFormData.notifyPatient}
+                    onCheckedChange={(checked) => setShareFormData(prev => ({ ...prev, notifyPatient: checked as boolean }))}
+                  />
+                  <Label htmlFor="notifyPatient" className="text-sm">Notify patient</Label>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-4">
+              <Button 
+                onClick={() => setShareDialogOpen(false)} 
+                variant="outline" 
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+              <Button 
+                onClick={handleShareSubmit} 
+                className="flex-1 bg-blue-600 hover:bg-blue-700"
+              >
+                <Send className="h-4 w-4 mr-2" />
+                Share Access
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
