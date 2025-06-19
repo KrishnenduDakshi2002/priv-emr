@@ -2,6 +2,7 @@ import Admin from "@/pages/admin/page";
 import Doctor from "@/pages/doctor/page";
 import Lab from "@/pages/lab/page";
 import User from "@/pages/user/page";
+import HomePage from "@/pages/home/page";
 import CreateEMRPage from "../pages/createEMR/page";
 import MyEMRsPage from "../pages/my-emr/page";
 import MyEMRsMainPage from "../pages/my-emrs-main/page";
@@ -16,6 +17,7 @@ import DoctorRequestAccessPage from "../pages/doctor-request-access/page";
 import ShareProofPage from "../pages/share-proof/page";
 
 export const routes = {
+  "/": () => <HomePage />,
   "/admin": () => <Admin />,
   "/user": () => <User />,
   "/doctor": () => <Doctor />,

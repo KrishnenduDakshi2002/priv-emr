@@ -6,6 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import BellNotification from "./bell-notification-component"
+import { useNavigate } from "raviger"
+import DoctorDashboardNavigation from "./doctor-dashboard.navigate"
 
 interface DashboardStats {
   pendingRequests: number
@@ -29,6 +31,7 @@ interface RecentActivity {
 }
 
 export default function DoctorDashboard() {
+  const navigate = useNavigate()
   const [stats] = useState<DashboardStats>({
     pendingRequests: 2,
     sharedEMRs: 8,
@@ -81,7 +84,7 @@ export default function DoctorDashboard() {
   ])
 
   const handleNavigate = (page: string) => {
-    console.log(`Navigating to ${page}`)
+    navigate(page)
   }
 
   return (
@@ -270,28 +273,7 @@ export default function DoctorDashboard() {
       </div>
 
       {/* Bottom Navigation */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-4 py-2">
-        <div className="flex justify-around">
-          <Button variant="ghost" className="flex-col h-12 text-blue-600">
-            <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center mb-1">
-              <div className="w-2 h-2 bg-blue-600 rounded-full" />
-            </div>
-            <span className="text-xs">Dashboard</span>
-          </Button>
-          <Button variant="ghost" className="flex-col h-12 text-gray-500" onClick={() => handleNavigate("requests")}>
-            <Bell className="h-4 w-4 mb-1" />
-            <span className="text-xs">Requests</span>
-          </Button>
-          <Button variant="ghost" className="flex-col h-12 text-gray-500" onClick={() => handleNavigate("emrs")}>
-            <FileText className="h-4 w-4 mb-1" />
-            <span className="text-xs">EMRs</span>
-          </Button>
-          <Button variant="ghost" className="flex-col h-12 text-gray-500" onClick={() => handleNavigate("settings")}>
-            <User className="h-4 w-4 mb-1" />
-            <span className="text-xs">Profile</span>
-          </Button>
-        </div>
-      </div>
+      <DoctorDashboardNavigation currentPage="dashboard" /> 
 
       {/* Mobile Safe Area */}
       <div className="h-16" />

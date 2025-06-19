@@ -4,6 +4,7 @@ import { ArrowLeft, Clock, User, CheckCircle, XCircle, Calendar } from "lucide-r
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import DoctorDashboardNavigation from "./doctor-dashboard.navigate"
 
 interface AccessRequest {
   id: string
@@ -252,6 +253,8 @@ export default function DoctorAccessRequests() {
           </div>
         )}
       </div>
+
+      <DoctorDashboardNavigation currentPage="requests" />
 
       {/* Mobile Safe Area */}
       <div className="h-4" />
