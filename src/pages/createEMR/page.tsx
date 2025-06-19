@@ -1,4 +1,3 @@
-
 import type React from "react"
 
 import { useState } from "react"
@@ -10,383 +9,576 @@ import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { toast } from "@/hooks/use-toast"
-import { Upload, FileText, Shield, Hash, CheckCircle } from "lucide-react"
-import { Navigation } from "@/components/navigation"
-import { EMRSuccessModal } from "@/components/emr-success-modal"
+import { Upload, FileText, Shield, Hash, CheckCircle, Plus, X, AlertCircle, Loader2 } from "lucide-react"
+import { CreateEMRFormData, EMRProcessingStatus, EMRType, EMRPriority } from "@/types/emr"
+import { ProcessingSimulator, FileProcessor } from "@/lib/emr-utils"
+import { useNavigate } from "raviger"
 
-interface EMRData {
-  patientEmail: string
-  aadhaarNumber: string
-  abhaId: string
-  title: string
-  details: string
-  file?: File
-}
+const EMR_TYPES: { value: EMRType; label: string }[] = [
+  { value: "lab", label: "Laboratory Report" },
+  { value: "imaging", label: "Medical Imaging" },
+  { value: "diagnostic", label: "Diagnostic Test" },
+  { value: "prescription", label: "Prescription" },
+  { value: "vaccination", label: "Vaccination Record" },
+  { value: "consultation", label: "Consultation Notes" },
+  { value: "surgery", label: "Surgery Report" },
+  { value: "other", label: "Other" }
+]
 
-interface ProcessingStep {
-  id: string
-  label: string
-  status: "pending" | "processing" | "completed" | "error"
-}
+const PRIORITIES: { value: EMRPriority; label: string; color: string }[] = [
+  { value: "low", label: "Low", color: "bg-gray-100 text-gray-700" },
+  { value: "medium", label: "Medium", color: "bg-blue-100 text-blue-700" },
+  { value: "high", label: "High", color: "bg-orange-100 text-orange-700" },
+  { value: "critical", label: "Critical", color: "bg-red-100 text-red-700" }
+]
 
 export default function CreateEMRPage() {
-  const [formData, setFormData] = useState<EMRData>({
+  const navigate = useNavigate()
+  const [formData, setFormData] = useState<CreateEMRFormData>({
     patientEmail: "",
     aadhaarNumber: "",
     abhaId: "",
+    patientName: "",
     title: "",
-    details: "",
+    description: "",
+    type: "lab",
+    subType: "",
+    priority: "medium",
+    tags: [],
+    textData: "",
+    providerName: "Lab Technician",
+    hospitalName: "PrivEMR Lab",
+    licenseNumber: ""
   })
+  
   const [isProcessing, setIsProcessing] = useState(false)
-  const [showSuccessModal, setShowSuccessModal] = useState(false)
-  const [processingSteps, setProcessingSteps] = useState<ProcessingStep[]>([
-    { id: "fetch-key", label: "Fetching patient public key", status: "pending" },
-    { id: "encrypt", label: "Encrypting EMR data", status: "pending" },
-    { id: "hash", label: "Generating hash", status: "pending" },
-    { id: "sign", label: "Digital signing", status: "pending" },
-    { id: "store", label: "Storing EMR", status: "pending" },
-    { id: "blockchain", label: "Recording on-chain", status: "pending" },
-  ])
-  const [emrResult, setEmrResult] = useState<{
-    id: string
-    hash: string
-    signature: string
-    timestamp: string
-  } | null>(null)
+  const [processingStatus, setProcessingStatus] = useState<EMRProcessingStatus | null>(null)
+  const [currentTag, setCurrentTag] = useState("")
+  const [fileValidation, setFileValidation] = useState<{ valid: boolean; error?: string } | null>(null)
 
-  const handleInputChange = (field: keyof EMRData, value: string) => {
-    setFormData((prev) => ({ ...prev, [field]: value }))
+  const handleInputChange = (field: keyof CreateEMRFormData, value: string) => {
+    setFormData(prev => ({ ...prev, [field]: value }))
   }
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (file) {
-      setFormData((prev) => ({ ...prev, file }))
-      toast({
-        title: "File uploaded",
-        description: `${file.name} has been selected for upload.`,
-      })
+      const validation = FileProcessor.validateFile(file)
+      setFileValidation(validation)
+      
+      if (validation.valid) {
+        setFormData(prev => ({ ...prev, file }))
+        toast({
+          title: "File uploaded",
+          description: `${file.name} (${FileProcessor.formatFileSize(file.size)}) has been selected.`,
+        })
+      } else {
+        toast({
+          title: "File validation failed",
+          description: validation.error,
+          variant: "destructive",
+        })
+      }
     }
   }
 
-  const updateStepStatus = (stepId: string, status: ProcessingStep["status"]) => {
-    setProcessingSteps((prev) => prev.map((step) => (step.id === stepId ? { ...step, status } : step)))
+  const addTag = () => {
+    if (currentTag.trim() && !formData.tags.includes(currentTag.trim())) {
+      setFormData(prev => ({
+        ...prev,
+        tags: [...prev.tags, currentTag.trim()]
+      }))
+      setCurrentTag("")
+    }
   }
 
-  const simulateProcessingStep = (stepId: string, delay: number): Promise<void> => {
-    return new Promise((resolve, reject) => {
-      updateStepStatus(stepId, "processing")
+  const removeTag = (tagToRemove: string) => {
+    setFormData(prev => ({
+      ...prev,
+      tags: prev.tags.filter(tag => tag !== tagToRemove)
+    }))
+  }
 
-      setTimeout(() => {
-        // Simulate occasional errors for demonstration
-        if (Math.random() < 0.05) {
-          updateStepStatus(stepId, "error")
-          reject(new Error(`Failed at step: ${stepId}`))
-        } else {
-          updateStepStatus(stepId, "completed")
-          resolve()
-        }
-      }, delay)
-    })
+  const validateForm = (): boolean => {
+    const required = [
+      'patientEmail',
+      'aadhaarNumber', 
+      'abhaId',
+      'title',
+      'description',
+      'providerName',
+      'hospitalName'
+    ] as const
+
+    for (const field of required) {
+      if (!formData[field]?.trim()) {
+        toast({
+          title: "Missing required field",
+          description: `Please fill in the ${field.replace(/([A-Z])/g, ' $1').toLowerCase()} field.`,
+          variant: "destructive",
+        })
+        return false
+      }
+    }
+
+    if (!formData.textData?.trim() && !formData.file) {
+      toast({
+        title: "Missing EMR content",
+        description: "Please provide either text data or upload a file.",
+        variant: "destructive",
+      })
+      return false
+    }
+
+    if (formData.file && fileValidation && !fileValidation.valid) {
+      toast({
+        title: "Invalid file",
+        description: fileValidation.error,
+        variant: "destructive",
+      })
+      return false
+    }
+
+    return true
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (
-      !formData.patientEmail ||
-      !formData.aadhaarNumber ||
-      !formData.abhaId ||
-      !formData.title ||
-      (!formData.details && !formData.file)
-    ) {
-      toast({
-        title: "Missing required fields",
-        description: "Please fill in all required fields including Aadhaar and ABHA ID.",
-        variant: "destructive",
-      })
+    if (!validateForm()) {
       return
     }
 
     setIsProcessing(true)
+    setProcessingStatus(null)
 
     try {
-      // Simulate cryptographic processing steps
-      await simulateProcessingStep("fetch-key", 1500)
-      await simulateProcessingStep("encrypt", 2000)
-      await simulateProcessingStep("hash", 1000)
-      await simulateProcessingStep("sign", 1500)
-      await simulateProcessingStep("store", 2000)
-      await simulateProcessingStep("blockchain", 2500)
-
-      // Generate mock result
-      const result = {
-        id: `EMR-${Date.now().toString(36).toUpperCase()}`,
-        hash: `0x${Math.random().toString(16).substring(2, 18)}...${Math.random().toString(16).substring(2, 8)}`,
-        signature: `0x${Math.random().toString(16).substring(2, 18)}...${Math.random().toString(16).substring(2, 8)}`,
-        timestamp: new Date().toISOString(),
-      }
-
-      setEmrResult(result)
-      setShowSuccessModal(true)
+      const emrRecord = await ProcessingSimulator.simulateEMRProcessing(
+        formData,
+        (status) => setProcessingStatus(status)
+      )
 
       toast({
         title: "EMR created successfully",
-        description: "Your EMR has been encrypted, signed, and stored securely.",
+        description: `EMR ${emrRecord.id} has been encrypted, signed, and stored securely.`,
       })
+
+      // Add a success state to show navigation options
+      setProcessingStatus({
+        step: 'completed',
+        status: 'completed',
+        progress: 100,
+        message: `EMR ${emrRecord.id} created successfully! Click below to view your EMRs.`
+      })
+
     } catch (error) {
       toast({
         title: "Processing failed",
         description: "There was an error processing your EMR. Please try again.",
         variant: "destructive",
       })
+      setProcessingStatus(null)
     } finally {
       setIsProcessing(false)
     }
   }
 
   const resetForm = () => {
-    setFormData({ patientEmail: "", aadhaarNumber: "", abhaId: "", title: "", details: "" })
-    setProcessingSteps((prev) => prev.map((step) => ({ ...step, status: "pending" })))
-    setEmrResult(null)
+    setFormData({
+      patientEmail: "",
+      aadhaarNumber: "",
+      abhaId: "",
+      patientName: "",
+      title: "",
+      description: "",
+      type: "lab",
+      subType: "",
+      priority: "medium",
+      tags: [],
+      textData: "",
+      providerName: "Lab Technician",
+      hospitalName: "PrivEMR Lab",
+      licenseNumber: ""
+    })
+    setProcessingStatus(null)
+    setFileValidation(null)
   }
 
-  const getStepIcon = (status: ProcessingStep["status"]) => {
+  const getProcessingIcon = (status: EMRProcessingStatus['status']) => {
     switch (status) {
       case "completed":
-        return <CheckCircle className="h-4 w-4 text-green-600" />
+        return <CheckCircle className="h-5 w-5 text-green-600" />
       case "processing":
-        return <div className="h-4 w-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+        return <Loader2 className="h-5 w-5 text-blue-600 animate-spin" />
       case "error":
-        return <div className="h-4 w-4 bg-red-600 rounded-full" />
+        return <AlertCircle className="h-5 w-5 text-red-600" />
       default:
-        return <div className="h-4 w-4 bg-gray-300 rounded-full" />
+        return <div className="h-5 w-5 bg-gray-300 rounded-full" />
     }
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50">
-      {/* <Navigation /> */}
-
-      <div className="container mx-auto px-4 py-8">
-        <div className="max-w-4xl mx-auto">
-          <div className="mb-8">
-            <div className="flex items-center gap-2 mb-4">
-              <Shield className="h-8 w-8 text-blue-600" />
-              <h1 className="text-3xl font-bold text-gray-900">Create & Upload EMR</h1>
-            </div>
-            <p className="text-gray-600">Securely create, encrypt, and digitally sign electronic medical records</p>
-          </div>
-
-          {!isProcessing ? (
-            <Card className="shadow-lg border-0">
-              <CardHeader className="bg-gradient-to-r from-blue-600 to-green-600 text-white rounded-t-lg">
-                <CardTitle className="flex items-center gap-2">
-                  <FileText className="h-5 w-5" />
-                  EMR Creation Form
-                </CardTitle>
-                <CardDescription className="text-blue-100">
-                  Fill in the patient details and EMR information below
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="p-6">
-                <form onSubmit={handleSubmit} className="space-y-6">
+    <div className="space-y-6">
+      {!isProcessing ? (
+        <Card className="shadow-lg border-0">
+          <CardHeader className="bg-gradient-to-r from-blue-600 to-green-600 text-white">
+            <CardTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              Create New EMR
+            </CardTitle>
+            <CardDescription className="text-blue-100">
+              Securely create, encrypt, and digitally sign electronic medical records
+            </CardDescription>
+          </CardHeader>
+          
+          <CardContent className="p-6">
+            <form onSubmit={handleSubmit} className="space-y-6">
+              {/* Patient Information */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-gray-900">Patient Information</h3>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="patientEmail" className="text-sm font-medium">
-                      Patient Email *
-                    </Label>
+                    <Label htmlFor="patientEmail">Patient Email *</Label>
                     <Input
                       id="patientEmail"
                       type="email"
                       placeholder="patient@example.com"
                       value={formData.patientEmail}
                       onChange={(e) => handleInputChange("patientEmail", e.target.value)}
-                      className="h-11"
                       required
                     />
-                    <p className="text-xs text-gray-500">Used to fetch patient's public key for encryption</p>
                   </div>
-
+                  
                   <div className="space-y-2">
-                    <Label htmlFor="aadhaarNumber" className="text-sm font-medium">
-                      Aadhaar Number *
-                    </Label>
+                    <Label htmlFor="patientName">Patient Name</Label>
+                    <Input
+                      id="patientName"
+                      placeholder="Full name (optional)"
+                      value={formData.patientName || ""}
+                      onChange={(e) => handleInputChange("patientName", e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="aadhaarNumber">Aadhaar Number *</Label>
                     <Input
                       id="aadhaarNumber"
-                      type="text"
                       placeholder="1234 5678 9012"
                       value={formData.aadhaarNumber}
                       onChange={(e) => handleInputChange("aadhaarNumber", e.target.value)}
-                      className="h-11"
                       maxLength={12}
                       required
                     />
-                    <p className="text-xs text-gray-500">12-digit Aadhaar identification number</p>
                   </div>
-
+                  
                   <div className="space-y-2">
-                    <Label htmlFor="abhaId" className="text-sm font-medium">
-                      ABHA ID *
-                    </Label>
+                    <Label htmlFor="abhaId">ABHA ID *</Label>
                     <Input
                       id="abhaId"
-                      type="text"
                       placeholder="12-3456-7890-1234"
                       value={formData.abhaId}
                       onChange={(e) => handleInputChange("abhaId", e.target.value)}
-                      className="h-11"
                       required
                     />
-                    <p className="text-xs text-gray-500">Ayushman Bharat Health Account ID</p>
                   </div>
+                </div>
+              </div>
 
+              {/* EMR Information */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-gray-900">EMR Information</h3>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="title" className="text-sm font-medium">
-                      EMR Title *
-                    </Label>
-                    <Input
-                      id="title"
-                      placeholder="Blood Report, Visit Notes, X-Ray Results, etc."
-                      value={formData.title}
-                      onChange={(e) => handleInputChange("title", e.target.value)}
-                      className="h-11"
-                      required
-                    />
+                    <Label htmlFor="type">EMR Type *</Label>
+                    <Select value={formData.type} onValueChange={(value: EMRType) => handleInputChange("type", value)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select EMR type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {EMR_TYPES.map(type => (
+                          <SelectItem key={type.value} value={type.value}>
+                            {type.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="priority">Priority *</Label>
+                    <Select value={formData.priority} onValueChange={(value: EMRPriority) => handleInputChange("priority", value)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select priority" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PRIORITIES.map(priority => (
+                          <SelectItem key={priority.value} value={priority.value}>
+                            {priority.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
 
-                  <div className="space-y-4">
-                    <Label className="text-sm font-medium">EMR Details *</Label>
-                    <Tabs defaultValue="text" className="w-full">
-                      <TabsList className="grid w-full grid-cols-2">
-                        <TabsTrigger value="text" className="flex items-center gap-2">
-                          <FileText className="h-4 w-4" />
-                          Text Entry
-                        </TabsTrigger>
-                        <TabsTrigger value="upload" className="flex items-center gap-2">
-                          <Upload className="h-4 w-4" />
-                          File Upload
-                        </TabsTrigger>
-                      </TabsList>
+                <div className="space-y-2">
+                  <Label htmlFor="title">EMR Title *</Label>
+                  <Input
+                    id="title"
+                    placeholder="Blood Report, X-Ray Results, etc."
+                    value={formData.title}
+                    onChange={(e) => handleInputChange("title", e.target.value)}
+                    required
+                  />
+                </div>
 
-                      <TabsContent value="text" className="mt-4">
-                        <Textarea
-                          placeholder="Enter detailed medical information, observations, test results, treatment notes, etc."
-                          value={formData.details}
-                          onChange={(e) => handleInputChange("details", e.target.value)}
-                          className="min-h-[200px] resize-none"
-                        />
-                      </TabsContent>
+                <div className="space-y-2">
+                  <Label htmlFor="description">Description *</Label>
+                  <Textarea
+                    id="description"
+                    placeholder="Brief description of the EMR content"
+                    value={formData.description}
+                    onChange={(e) => handleInputChange("description", e.target.value)}
+                    required
+                  />
+                </div>
 
-                      <TabsContent value="upload" className="mt-4">
-                        <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-blue-400 transition-colors">
-                          <Upload className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                          <div className="space-y-2">
-                            <p className="text-sm font-medium">Upload EMR Document</p>
-                            <p className="text-xs text-gray-500">PDF, DOCX files supported</p>
-                            <Input
-                              type="file"
-                              accept=".pdf,.docx,.doc"
-                              onChange={handleFileUpload}
-                              className="max-w-xs mx-auto"
-                            />
+                <div className="space-y-2">
+                  <Label htmlFor="subType">Sub Type</Label>
+                  <Input
+                    id="subType"
+                    placeholder="e.g., CBC, X-Ray Chest, etc."
+                    value={formData.subType || ""}
+                    onChange={(e) => handleInputChange("subType", e.target.value)}
+                  />
+                </div>
+
+                {/* Tags */}
+                <div className="space-y-2">
+                  <Label>Tags</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Add tag"
+                      value={currentTag}
+                      onChange={(e) => setCurrentTag(e.target.value)}
+                      onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
+                    />
+                    <Button type="button" variant="outline" onClick={addTag}>
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  {formData.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {formData.tags.map(tag => (
+                        <Badge key={tag} variant="secondary" className="flex items-center gap-1">
+                          {tag}
+                          <X className="h-3 w-3 cursor-pointer" onClick={() => removeTag(tag)} />
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* EMR Content */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-gray-900">EMR Content</h3>
+                
+                <Tabs defaultValue="text" className="w-full">
+                  <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="text">Text Entry</TabsTrigger>
+                    <TabsTrigger value="upload">File Upload</TabsTrigger>
+                  </TabsList>
+
+                  <TabsContent value="text" className="mt-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="textData">Medical Data</Label>
+                      <Textarea
+                        id="textData"
+                        placeholder="Enter detailed medical information, observations, test results, treatment notes, etc."
+                        value={formData.textData || ""}
+                        onChange={(e) => handleInputChange("textData", e.target.value)}
+                        className="min-h-[200px]"
+                      />
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="upload" className="mt-4">
+                    <div className="space-y-4">
+                      <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-blue-400 transition-colors">
+                        <Upload className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                        <div className="space-y-2">
+                          <p className="text-sm font-medium">Upload EMR Document</p>
+                          <p className="text-xs text-gray-500">PDF, DOCX, Images supported (Max 50MB)</p>
+                          <Input
+                            type="file"
+                            accept=".pdf,.docx,.doc,.jpg,.jpeg,.png,.gif,.txt"
+                            onChange={handleFileUpload}
+                            className="max-w-xs mx-auto"
+                          />
+                        </div>
+                      </div>
+                      
+                      {formData.file && (
+                        <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
+                          <FileText className="h-5 w-5 text-blue-600" />
+                          <div className="flex-1">
+                            <p className="text-sm font-medium">{formData.file.name}</p>
+                            <p className="text-xs text-gray-500">
+                              {FileProcessor.formatFileSize(formData.file.size)}
+                            </p>
                           </div>
-                          {formData.file && (
-                            <Badge variant="secondary" className="mt-4">
-                              {formData.file.name}
-                            </Badge>
+                          {fileValidation?.valid && (
+                            <CheckCircle className="h-5 w-5 text-green-600" />
                           )}
                         </div>
-                      </TabsContent>
-                    </Tabs>
-                  </div>
+                      )}
+                      
+                      {fileValidation && !fileValidation.valid && (
+                        <Alert variant="destructive">
+                          <AlertCircle className="h-4 w-4" />
+                          <AlertDescription>{fileValidation.error}</AlertDescription>
+                        </Alert>
+                      )}
+                    </div>
+                  </TabsContent>
+                </Tabs>
+              </div>
 
-                  <div className="flex gap-4 pt-4">
-                    <Button
-                      type="submit"
-                      className="flex-1 h-12 bg-gradient-to-r from-blue-600 to-green-600 hover:from-blue-700 hover:to-green-700"
-                    >
-                      <Shield className="h-4 w-4 mr-2" />
-                      Encrypt & Sign EMR
-                    </Button>
-                    <Button type="button" variant="outline" onClick={resetForm} className="px-8 h-12">
-                      Reset
-                    </Button>
+              {/* Provider Information */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-gray-900">Provider Information</h3>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="providerName">Provider Name *</Label>
+                    <Input
+                      id="providerName"
+                      placeholder="Doctor/Lab Technician name"
+                      value={formData.providerName}
+                      onChange={(e) => handleInputChange("providerName", e.target.value)}
+                      required
+                    />
                   </div>
-                </form>
-              </CardContent>
-            </Card>
-          ) : (
-            <Card className="shadow-lg border-0">
-              <CardHeader className="bg-gradient-to-r from-blue-600 to-green-600 text-white rounded-t-lg">
-                <CardTitle className="flex items-center gap-2">
-                  <Hash className="h-5 w-5" />
-                  Processing EMR
-                </CardTitle>
-                <CardDescription className="text-blue-100">Encrypting and signing your EMR securely</CardDescription>
-              </CardHeader>
-              <CardContent className="p-6">
-                <div className="space-y-6">
-                  <div className="space-y-4">
-                    {processingSteps.map((step) => (
-                      <div key={step.id} className="flex items-center gap-4 p-4 rounded-lg bg-gray-50">
-                        {getStepIcon(step.status)}
-                        <div className="flex-1">
-                          <p className="font-medium text-sm">{step.label}</p>
-                        </div>
-                        <Badge
-                          variant={
-                            step.status === "completed"
-                              ? "default"
-                              : step.status === "processing"
-                                ? "secondary"
-                                : step.status === "error"
-                                  ? "destructive"
-                                  : "outline"
-                          }
-                        >
-                          {step.status}
-                        </Badge>
-                      </div>
-                    ))}
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="hospitalName">Hospital/Lab Name *</Label>
+                    <Input
+                      id="hospitalName"
+                      placeholder="Hospital or laboratory name"
+                      value={formData.hospitalName}
+                      onChange={(e) => handleInputChange("hospitalName", e.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="licenseNumber">License Number</Label>
+                  <Input
+                    id="licenseNumber"
+                    placeholder="Medical license number (optional)"
+                    value={formData.licenseNumber || ""}
+                    onChange={(e) => handleInputChange("licenseNumber", e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {/* Submit Buttons */}
+              <div className="flex gap-4 pt-4">
+                <Button
+                  type="submit"
+                  className="flex-1 h-12 bg-gradient-to-r from-blue-600 to-green-600 hover:from-blue-700 hover:to-green-700"
+                  disabled={isProcessing}
+                >
+                  <Shield className="h-4 w-4 mr-2" />
+                  Encrypt & Sign EMR
+                </Button>
+                <Button type="button" variant="outline" onClick={resetForm} className="px-8 h-12">
+                  Reset
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      ) : (
+        /* Processing View */
+        <Card className="shadow-lg border-0">
+          <CardHeader className="bg-gradient-to-r from-blue-600 to-green-600 text-white">
+            <CardTitle className="flex items-center gap-2">
+              <Hash className="h-5 w-5" />
+              Processing EMR
+            </CardTitle>
+            <CardDescription className="text-blue-100">
+              Encrypting and signing your EMR securely
+            </CardDescription>
+          </CardHeader>
+          
+          <CardContent className="p-6">
+            <div className="space-y-6">
+              {processingStatus && (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-4 p-4 rounded-lg bg-gray-50">
+                    {getProcessingIcon(processingStatus.status)}
+                    <div className="flex-1">
+                      <p className="font-medium text-sm capitalize">{processingStatus.step}</p>
+                      {processingStatus.message && (
+                        <p className="text-sm text-gray-600">{processingStatus.message}</p>
+                      )}
+                    </div>
+                    <Badge
+                      variant={
+                        processingStatus.status === "completed"
+                          ? "default"
+                          : processingStatus.status === "processing"
+                            ? "secondary"
+                            : processingStatus.status === "error"
+                              ? "destructive"
+                              : "outline"
+                      }
+                    >
+                      {processingStatus.status}
+                    </Badge>
                   </div>
 
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm">
-                      <span>Overall Progress</span>
-                      <span>
-                        {processingSteps.filter((s) => s.status === "completed").length}/{processingSteps.length}
-                      </span>
+                      <span>Progress</span>
+                      <span>{Math.round(processingStatus.progress)}%</span>
                     </div>
-                    <Progress
-                      value={
-                        (processingSteps.filter((s) => s.status === "completed").length / processingSteps.length) * 100
-                      }
-                      className="h-2"
-                    />
+                    <Progress value={processingStatus.progress} className="h-2" />
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-      </div>
 
-      {emrResult && (
-        <EMRSuccessModal
-          isOpen={showSuccessModal}
-          onClose={() => setShowSuccessModal(false)}
-          emrData={{
-            id: emrResult.id,
-            patientEmail: formData.patientEmail,
-            title: formData.title,
-            hash: emrResult.hash,
-            signature: emrResult.signature,
-            timestamp: emrResult.timestamp,
-            aadhaarNumber: formData.aadhaarNumber,
-            abhaId: formData.abhaId,
-          }}
-        />
+                  {processingStatus.status === 'completed' && processingStatus.progress === 100 && (
+                    <div className="flex gap-3 pt-4">
+                      <Button 
+                        onClick={() => navigate("/my-emrs-main")} 
+                        className="flex-1 bg-green-600 hover:bg-green-700 text-white"
+                      >
+                        <CheckCircle className="h-4 w-4 mr-2" />
+                        View My EMRs
+                      </Button>
+                      <Button 
+                        onClick={resetForm} 
+                        variant="outline" 
+                        className="px-6"
+                      >
+                        Create Another
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
       )}
     </div>
   )

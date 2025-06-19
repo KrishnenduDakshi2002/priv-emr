@@ -1,100 +1,182 @@
 
-import { useState } from "react"
-import { Search, Plus, Eye, Share2, MoreVertical, Calendar, User, CheckCircle, XCircle } from "lucide-react"
+import { useState, useEffect } from "react"
+import { Search, Plus, Eye, Share2, MoreVertical, Calendar, User, CheckCircle, XCircle, FileText } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { useNavigate } from "raviger"
+import { EMRSummary } from "@/types/emr"
+import { EMRStorage } from "@/lib/emr-utils"
 import BottomNavigation from "./bottom-navigation"
 import BellNotification from "./bell-notification-component"
 
-interface EMR {
-  id: string
-  title: string
-  description: string
-  dateCreated: string
-  sender: string
-  hospital: string
-  verified: boolean
-  type: string
-  fileSize?: string
-  lastAccessed?: string
-}
-
 export default function MyEMRsMainScreen() {
+  const navigate = useNavigate()
   const [searchQuery, setSearchQuery] = useState("")
   const [filterType, setFilterType] = useState("all")
   const [isLoading, setIsLoading] = useState(false)
+  const [emrs, setEmrs] = useState<EMRSummary[]>([])
+  const [showDummyData, setShowDummyData] = useState(true)
 
-  // Mock EMR data - this would come from API after registration
-  const [emrs] = useState<EMR[]>([
+  // Dummy EMR data for demonstration
+  const dummyEMRs: EMRSummary[] = [
     {
-      id: "1",
-      title: "Blood Test Report",
+      id: "EMR-DEMO001",
+      title: "Blood Test Report - Complete Blood Count",
       description: "Complete Blood Count (CBC) and Lipid Profile analysis showing normal ranges for all parameters",
-      dateCreated: "2025-04-10T10:30:00Z",
-      sender: "Dr. Arvind Kumar",
+      type: "lab",
+      subType: "Blood Work",
+      dateCreated: "2024-01-15T10:30:00Z",
+      provider: "Dr. Arvind Kumar",
       hospital: "Apollo Hospital",
       verified: true,
-      type: "lab",
+      priority: "medium",
       fileSize: "2.4 MB",
-      lastAccessed: "2025-06-15T14:20:00Z",
+      lastAccessed: "2024-01-20T14:20:00Z",
+      tags: ["blood-test", "routine", "cbc"]
     },
     {
-      id: "2",
+      id: "EMR-DEMO002",
       title: "X-Ray Chest PA View",
       description: "Chest X-ray showing clear lung fields with no signs of infection or abnormalities",
-      dateCreated: "2025-03-28T15:45:00Z",
-      sender: "Dr. Priya Sharma",
+      type: "imaging",
+      subType: "X-Ray",
+      dateCreated: "2024-01-12T15:45:00Z",
+      provider: "Dr. Priya Sharma",
       hospital: "Max Healthcare",
       verified: true,
-      type: "imaging",
+      priority: "high",
       fileSize: "8.1 MB",
-      lastAccessed: "2025-06-10T09:15:00Z",
+      lastAccessed: "2024-01-18T09:15:00Z",
+      tags: ["x-ray", "chest", "imaging"]
     },
     {
-      id: "3",
+      id: "EMR-DEMO003",
       title: "Prescription - Diabetes Management",
       description: "Medication prescription for Type 2 diabetes including Metformin and dietary recommendations",
-      dateCreated: "2025-03-15T11:20:00Z",
-      sender: "Dr. Rajesh Patel",
+      type: "prescription",
+      subType: "Medication",
+      dateCreated: "2024-01-10T11:20:00Z",
+      provider: "Dr. Rajesh Patel",
       hospital: "Fortis Hospital",
       verified: false,
-      type: "prescription",
+      priority: "critical",
       fileSize: "1.2 MB",
+      tags: ["diabetes", "prescription", "medication"]
     },
     {
-      id: "4",
-      title: "ECG Report",
+      id: "EMR-DEMO004",
+      title: "ECG Report - Routine Checkup",
       description: "12-lead electrocardiogram showing normal sinus rhythm with no arrhythmias detected",
-      dateCreated: "2025-02-20T09:30:00Z",
-      sender: "Dr. Sunita Roy",
+      type: "diagnostic",
+      subType: "ECG",
+      dateCreated: "2024-01-08T09:30:00Z",
+      provider: "Dr. Sunita Roy",
       hospital: "AIIMS Delhi",
       verified: true,
-      type: "diagnostic",
+      priority: "medium",
       fileSize: "3.7 MB",
-      lastAccessed: "2025-05-28T16:45:00Z",
+      lastAccessed: "2024-01-16T16:45:00Z",
+      tags: ["ecg", "heart", "routine"]
     },
     {
-      id: "5",
-      title: "Vaccination Certificate",
+      id: "EMR-DEMO005",
+      title: "COVID-19 Vaccination Certificate",
       description: "COVID-19 vaccination certificate - 2nd dose of Covishield administered",
-      dateCreated: "2025-01-15T14:00:00Z",
-      sender: "Dr. Amit Singh",
+      type: "vaccination",
+      subType: "COVID-19",
+      dateCreated: "2024-01-05T14:00:00Z",
+      provider: "Dr. Amit Singh",
       hospital: "Government Hospital",
       verified: true,
-      type: "vaccination",
+      priority: "low",
       fileSize: "0.8 MB",
+      tags: ["covid-19", "vaccination", "certificate"]
     },
-  ])
+    {
+      id: "EMR-DEMO006",
+      title: "MRI Brain Scan",
+      description: "Brain MRI scan showing normal brain structure with no abnormalities detected",
+      type: "imaging",
+      subType: "MRI",
+      dateCreated: "2024-01-03T16:15:00Z",
+      provider: "Dr. Neha Gupta",
+      hospital: "Medanta Hospital",
+      verified: true,
+      priority: "high",
+      fileSize: "15.3 MB",
+      lastAccessed: "2024-01-14T11:30:00Z",
+      tags: ["mri", "brain", "neurology"]
+    },
+    {
+      id: "EMR-DEMO007",
+      title: "Consultation Notes - Cardiology",
+      description: "Cardiology consultation for chest pain evaluation, including stress test recommendations",
+      type: "consultation",
+      subType: "Cardiology",
+      dateCreated: "2024-01-01T13:45:00Z",
+      provider: "Dr. Vikram Singh",
+      hospital: "Escorts Heart Institute",
+      verified: true,
+      priority: "medium",
+      fileSize: "2.1 MB",
+      tags: ["cardiology", "consultation", "chest-pain"]
+    }
+  ]
+
+  // Load EMRs from localStorage
+  const loadEMRs = () => {
+    try {
+      const storedEMRs = EMRStorage.getEMRSummaries()
+      console.log('Loaded EMRs from localStorage:', storedEMRs)
+      
+      // Combine stored EMRs with dummy data based on toggle
+      const combinedEMRs = showDummyData ? [...dummyEMRs, ...storedEMRs] : storedEMRs
+      setEmrs(combinedEMRs)
+    } catch (error) {
+      console.error('Failed to load EMRs:', error)
+      // Fallback to dummy data if localStorage fails and dummy data is enabled
+      setEmrs(showDummyData ? dummyEMRs : [])
+    }
+  }
+
+  // Load EMRs on component mount and when dummy data toggle changes
+  useEffect(() => {
+    loadEMRs()
+  }, [showDummyData])
+
+  // Also reload EMRs when the component becomes visible (when navigating back)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        loadEMRs()
+      }
+    }
+
+    const handleFocus = () => {
+      loadEMRs()
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    window.addEventListener('focus', handleFocus)
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('focus', handleFocus)
+    }
+  }, [])
+
+  // If no EMRs in localStorage, show empty state
+  const displayEmrs = emrs.length > 0 ? emrs : []
 
   const filteredEMRs = emrs.filter((emr) => {
     const matchesSearch =
       emr.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       emr.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      emr.sender.toLowerCase().includes(searchQuery.toLowerCase())
+      emr.provider.toLowerCase().includes(searchQuery.toLowerCase())
     const matchesFilter = filterType === "all" || emr.type === filterType
     return matchesSearch && matchesFilter
   })
@@ -161,13 +243,37 @@ export default function MyEMRsMainScreen() {
   }
 
   const handleUploadEMR = () => {
-    console.log("Upload new EMR")
-    // Navigate to upload screen
+    navigate("/create-emr")
   }
 
   const handleNotificationClick = () => {
     console.log("Opening notifications")
     // Navigate to notifications/activity log
+  }
+
+  const handleRefresh = () => {
+    console.log("Refreshing EMR list...")
+    loadEMRs()
+  }
+
+  const toggleDummyData = () => {
+    setShowDummyData(!showDummyData)
+    // Reload EMRs after toggle
+    setTimeout(() => loadEMRs(), 100)
+  }
+
+  // Debug function to check localStorage
+  const debugLocalStorage = () => {
+    const stored = localStorage.getItem('privemr_records')
+    console.log('Raw localStorage data:', stored)
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored)
+        console.log('Parsed localStorage data:', parsed)
+      } catch (error) {
+        console.error('Error parsing localStorage data:', error)
+      }
+    }
   }
 
   return (
@@ -186,6 +292,21 @@ export default function MyEMRsMainScreen() {
           </div>
           <div className="flex items-center gap-2">
             <BellNotification unreadCount={3} onClick={handleNotificationClick} />
+            <Button onClick={handleRefresh} size="sm" variant="outline" className="text-gray-600">
+              <FileText className="h-4 w-4 mr-1" />
+              Refresh
+            </Button>
+            <Button 
+              onClick={toggleDummyData} 
+              size="sm" 
+              variant={showDummyData ? "default" : "outline"} 
+              className={showDummyData ? "bg-green-500 text-white" : "text-gray-600"}
+            >
+              {showDummyData ? "Hide" : "Show"} Demo
+            </Button>
+            <Button onClick={debugLocalStorage} size="sm" variant="outline" className="text-gray-600">
+              Debug
+            </Button>
             <Button onClick={handleUploadEMR} size="sm" className="bg-blue-500 hover:bg-blue-600 text-white">
               <Plus className="h-4 w-4 mr-1" />
               Add
@@ -275,12 +396,14 @@ export default function MyEMRsMainScreen() {
             <p className="text-gray-500 text-sm mb-6 max-w-sm mx-auto">
               {searchQuery
                 ? "Try adjusting your search terms or filters"
-                : "Your medical records will appear here once doctors share them with you or you upload them yourself"}
+                : "Your medical records will appear here once you create them or doctors share them with you"}
             </p>
-            <Button onClick={handleUploadEMR} className="bg-blue-500 hover:bg-blue-600 text-white">
-              <Plus className="mr-2 h-4 w-4" />
-              Upload Your First EMR
-            </Button>
+            {!searchQuery && (
+              <Button onClick={handleUploadEMR} className="bg-blue-500 hover:bg-blue-600 text-white">
+                <Plus className="h-4 w-4 mr-2" />
+                Create Your First EMR
+              </Button>
+            )}
           </div>
         ) : (
           filteredEMRs.map((emr) => (
@@ -329,7 +452,7 @@ export default function MyEMRsMainScreen() {
                     <div className="flex items-center gap-4 text-xs text-gray-600">
                       <div className="flex items-center gap-1">
                         <User className="h-3 w-3" />
-                        <span className="font-medium">{emr.sender}</span>
+                                                  <span className="font-medium">{emr.provider}</span>
                       </div>
                       <div className="flex items-center gap-1">
                         <Calendar className="h-3 w-3" />
