@@ -1,6 +1,6 @@
 import React from 'react'
 
-const Doctor = () => {
+const Doctor = (): React.ReactNode => {
   return (
     <div>Doctor</div>
   )
